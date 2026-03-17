@@ -1,5 +1,5 @@
-import { normalizeCandidate, normalizeText } from "@citecheck/core";
-import type { CandidateRecord, NormalizedQuery } from "@citecheck/core";
+import { normalizeCandidate, normalizeText } from "../core/index.js";
+import type { CandidateRecord, NormalizedQuery } from "../core/index.js";
 import { ConnectorPayloadError, type ConnectorSearchResult, type ReferenceConnector } from "./types.js";
 import type { HttpClient } from "./http.js";
 

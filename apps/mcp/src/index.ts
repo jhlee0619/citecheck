@@ -11,7 +11,7 @@ import {
   type SourceFailureClass,
   type ValidationResult,
   type ValidationStatus
-} from "@citecheck/core";
+} from "./lib/core/index.js";
 import {
   applyPolicyOverrides,
   evaluatePolicy,
@@ -21,7 +21,7 @@ import {
   type ExitPolicy,
   type PolicyOverrides,
   type PolicyPresetName
-} from "@citecheck/policy";
+} from "./lib/policy/index.js";
 import {
   buildRuntimeFromConfig,
   defaultRuntimeFactoryConfig,
@@ -30,7 +30,7 @@ import {
   SourceReplayRegistry,
   type RuntimeFactoryConfig,
   type SourceReplayEntry
-} from "@citecheck/runtime";
+} from "./lib/runtime/index.js";
 
 const execFileAsync = promisify(execFile);
 const SUPPORTED_EXTENSIONS = [".bib", ".tex", ".md", ".txt", ".docx"] as const;

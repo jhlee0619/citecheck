@@ -63,7 +63,6 @@ Use `repair_paper` for all reference-repair work.
 Core inputs for `repair_paper`:
 
 - `target_path`
-- `live`
 - `output_format`
 - `policy`
 - `fixture_mode`

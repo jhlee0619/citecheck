@@ -15,8 +15,7 @@ describe("citecheck mcp", () => {
 
     const result = await callRepairPaperTool({
       target_path: filePath,
-      output_format: "json",
-      live: false
+      output_format: "json"
     });
 
     expect(result.isError).toBeUndefined();

@@ -27,7 +27,6 @@ Use `repair_paper` when the user asks to check, validate, fix, or repair:
 Core inputs:
 
 - `target_path`
-- `live`
 - `output_format`
 - `policy`
 

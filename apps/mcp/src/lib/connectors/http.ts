@@ -1,4 +1,4 @@
-import type { SourceFailureClass, SourceFailureReason, SourceName } from "@citecheck/core";
+import type { SourceFailureClass, SourceFailureReason, SourceName } from "../core/index.js";
 import { ConnectorError } from "./types.js";
 
 export interface HttpRequest {

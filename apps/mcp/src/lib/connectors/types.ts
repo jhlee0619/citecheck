@@ -5,7 +5,7 @@ import type {
   SourceFailureReason,
   SourceName,
   TriState
-} from "@citecheck/core";
+} from "../core/index.js";
 
 export type ConnectorRole = "authority" | "manifestation" | "enrichment";
 

@@ -1,5 +1,5 @@
-import { normalizeCandidate } from "@citecheck/core";
-import type { CandidateRecord, NormalizedQuery, SourceName, TriState } from "@citecheck/core";
+import { normalizeCandidate } from "../core/index.js";
+import type { CandidateRecord, NormalizedQuery, SourceName, TriState } from "../core/index.js";
 import type { ConnectorRole, ConnectorSearchResult, ReferenceConnector } from "./types.js";
 
 interface MemoryConnectorOptions {

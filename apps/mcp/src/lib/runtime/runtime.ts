@@ -9,7 +9,7 @@ import {
   normalizeReferenceInput,
   scoreComparison,
   selectPreferredManifestation
-} from "@citecheck/core";
+} from "../core/index.js";
 import type {
   BatchResult,
   CandidateComparison,
@@ -21,8 +21,8 @@ import type {
   TriState,
   ValidationIssue,
   ValidationResult
-} from "@citecheck/core";
-import { toConnectorError, type ReferenceConnector } from "@citecheck/connectors";
+} from "../core/index.js";
+import { toConnectorError, type ReferenceConnector } from "../connectors/index.js";
 
 export interface RuntimeOptions {
   connectors: ReferenceConnector[];

@@ -10,7 +10,7 @@ import {
   type HttpClient,
   type HttpRequest,
   type SourceHttpPolicy
-} from "@citecheck/connectors";
+} from "../connectors/index.js";
 import { CitecheckRuntime } from "./runtime.js";
 import { SourceReplayRegistry } from "./fixture-registry.js";
 

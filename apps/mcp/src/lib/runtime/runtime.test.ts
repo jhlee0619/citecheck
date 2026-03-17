@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MemoryConnector } from "@citecheck/connectors";
+import { MemoryConnector } from "../connectors/index.js";
 import { CitecheckRuntime } from "./runtime.js";
-import type { NormalizedQuery } from "@citecheck/core";
-import type { ReferenceConnector } from "@citecheck/connectors";
+import type { NormalizedQuery } from "../core/index.js";
+import type { ReferenceConnector } from "../connectors/index.js";
 
 describe("runtime orchestration", () => {
   it("produces evidence-backed results with manifestation awareness", async () => {

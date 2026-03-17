@@ -1,4 +1,4 @@
-import type { SourceFailureClass } from "@citecheck/core";
+import type { SourceFailureClass } from "../core/index.js";
 
 export type PolicyMetric =
   | "not_checked_ratio"
