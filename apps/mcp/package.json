@@ -4,6 +4,14 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/jhlee0619/citecheck",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jhlee0619/citecheck.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jhlee0619/citecheck/issues"
+  },
   "files": [
     "bin",
     "src/index.ts",
