@@ -1,0 +1,70 @@
+digraph citecheck {
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#f0f4f8", color="#4a5568", penwidth=1.2];
+  edge [fontname="Helvetica", fontsize=9, color="#718096", penwidth=1.0];
+  bgcolor="white";
+  pad=0.3;
+
+  subgraph cluster_agent {
+    label="AI Agent (Claude Code / Codex)";
+    labeljust=l;
+    fontsize=11;
+    style="dashed,rounded";
+    color="#a0aec0";
+    fillcolor="#fafbfc";
+    agent [label="Agent\nWorkflow", fillcolor="#e2e8f0"];
+  }
+
+  subgraph cluster_mcp {
+    label="citecheck MCP Server";
+    labeljust=l;
+    fontsize=11;
+    style="rounded,filled";
+    color="#3182ce";
+    fillcolor="#ebf8ff";
+
+    tools [label="MCP Tools\nscan_workspace | analyze_references\nplan_reference_rewrite | apply_reference_rewrite", shape=record, fillcolor="#bee3f8"];
+    repair [label="Repair API\n(extraction, linting,\nformat detection)", fillcolor="#bee3f8"];
+    runtime [label="Verification Runtime\n(multi-pass orchestration,\ncandidate clustering)", fillcolor="#90cdf4"];
+    policy [label="Policy Engine\n(batch quality gates,\nexit decisions)", fillcolor="#90cdf4"];
+    core [label="Core\n(normalization, scoring,\nevidence building)", fillcolor="#90cdf4"];
+  }
+
+  subgraph cluster_sources {
+    label="External Data Sources";
+    labeljust=l;
+    fontsize=11;
+    style="rounded,filled";
+    color="#38a169";
+    fillcolor="#f0fff4";
+
+    pubmed [label="PubMed\nE-utilities", fillcolor="#c6f6d5"];
+    crossref [label="Crossref\nREST API", fillcolor="#c6f6d5"];
+    arxiv [label="arXiv\nAPI", fillcolor="#c6f6d5"];
+    semantic [label="Semantic\nScholar API", fillcolor="#c6f6d5"];
+  }
+
+  subgraph cluster_input {
+    label="Manuscript Files";
+    labeljust=l;
+    fontsize=11;
+    style="rounded,filled";
+    color="#805ad5";
+    fillcolor="#faf5ff";
+
+    files [label=".bib  |  .tex  |  .md  |  .txt  |  .docx", shape=record, fillcolor="#e9d8fd"];
+  }
+
+  agent -> tools [label="MCP stdio"];
+  files -> repair [label="read"];
+  tools -> repair;
+  repair -> runtime;
+  runtime -> core;
+  runtime -> policy;
+  runtime -> pubmed [label="parallel", style=dashed];
+  runtime -> crossref [label="", style=dashed];
+  runtime -> arxiv [label="", style=dashed];
+  runtime -> semantic [label="", style=dashed];
+  tools -> agent [label="JSON / BibTeX /\nNumbered / Markdown", style=dotted, dir=back];
+}

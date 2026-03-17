@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: citecheck
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Lee
+    given-names: Junhyeok
+    orcid: "https://orcid.org/0000-0001-7489-5829"
+    affiliation: "Seoul National University College of Medicine"
+repository-code: "https://github.com/jhlee0619/citecheck"
+license: MIT
+version: 0.1.12
+date-released: "2026-03-17"
+keywords:
+  - bibliographic verification
+  - reference management
+  - Model Context Protocol
+  - scholarly communication
+  - MCP server
