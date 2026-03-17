@@ -46,7 +46,8 @@ const applyReferenceRewriteSchema = {
   policy: z.enum(["default", "strict", "lenient"]).optional().describe("Batch policy preset."),
   fixture_mode: z.enum(["off", "prefer", "only"]).optional().describe("Fixture replay mode."),
   fixture_manifest: z.string().optional().describe("Optional fixture manifest path."),
-  write_mode: z.enum(["sidecar", "replace"]).optional().default("sidecar").describe("How to apply the rewrite plan.")
+  write_mode: z.enum(["sidecar", "replace"]).optional().default("sidecar").describe("How to apply the rewrite plan."),
+  remove_unresolved: z.boolean().optional().default(false).describe("Remove unresolved/not_checked entries and their citations from paper files.")
 };
 
 type RepairPaperToolArgs = z.output<z.ZodObject<typeof repairPaperSchema>>;
@@ -171,7 +172,8 @@ export async function callApplyReferenceRewriteTool(args: ApplyReferenceRewriteT
       policy: args.policy,
       fixtureMode: args.fixture_mode,
       fixtureManifestPath: args.fixture_manifest,
-      writeMode: args.write_mode
+      writeMode: args.write_mode,
+      removeUnresolved: args.remove_unresolved
     });
     return {
       content: [

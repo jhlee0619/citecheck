@@ -60,7 +60,11 @@ After running `repair_paper`, summarize:
 
 After presenting the summary, ask the user how they want to receive the corrections:
 
-1. **Overwrite original file?** — Use `apply_reference_rewrite` with `write_mode: "replace"`. The output preserves the original file format (bib stays bib, numbered stays numbered).
+1. **Overwrite original file?** — Use `apply_reference_rewrite` with `write_mode: "replace"`. The output preserves the original file format (bib stays bib, numbered stays numbered). If citation keys changed, `.tex` files in the same directory that reference the `.bib` file are automatically updated (`\cite`, `\citep`, `\citet`, etc.). Report any `citationKeyRewrites` in the result to the user. Ask if the user wants to remove unresolved entries (`remove_unresolved: true`). When enabled:
+   - Unresolved/not_checked entries are removed from the bibliography
+   - For `.tex`: `\cite{removedKey}` commands are removed from citing files
+   - For `.md`/`.txt`: `[N]` citation markers are removed and remaining numbers are renumbered
+   - Report `removedEntries` and `citationRemovals` to the user
 2. **Save separately?** — Ask which format:
    - **BibTeX** (`.bib`) — `output_format: "bibtex"`
    - **Numbered list** — `output_format: "numbered"`

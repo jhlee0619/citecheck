@@ -46,6 +46,7 @@ const SKIPPED_DIRECTORIES = new Set([".git", "node_modules", "dist", "build", "a
 const REFERENCE_HEADERS = ["references", "bibliography", "works cited"];
 const FILE_HINTS = ["reference", "references", "bibliography", "paper", "manuscript", "draft", "supplement"];
 const TITLE_STOP_WORDS = new Set(["with", "from", "that", "this", "into", "using"]);
+const TEX_CITE_COMMANDS = "cite|citep|citet|citealt|citealp|citeauthor|citeyear|parencite|textcite|autocite|nocite";
 
 type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];
 type DetectedFormat = "bib" | "tex" | "md" | "txt" | "docx";
@@ -278,7 +279,21 @@ export interface PlanReferenceRewriteResult {
   };
 }
 
-export interface ApplyReferenceRewriteOptions extends PlanReferenceRewriteOptions {}
+export interface ApplyReferenceRewriteOptions extends PlanReferenceRewriteOptions {
+  removeUnresolved?: boolean;
+}
+
+export interface CitationKeyRewrite {
+  file: string;
+  replacements: Array<{ oldKey: string; newKey: string }>;
+}
+
+export interface CitationRemoval {
+  file: string;
+  removedKeys: string[];
+  removedNumbers: number[];
+  renumberMap: Array<{ oldNumber: number; newNumber: number }>;
+}
 
 export interface ApplyReferenceRewriteResult {
   applied: boolean;
@@ -286,6 +301,9 @@ export interface ApplyReferenceRewriteResult {
   targetFilesWritten: string[];
   replacementStatus: ReplacementStatus;
   patches: RewritePatch[];
+  citationKeyRewrites: CitationKeyRewrite[];
+  citationRemovals: CitationRemoval[];
+  removedEntries: Array<{ entryIndex: number; key?: string; reason: string }>;
 }
 
 interface OriginalBibEntry {
@@ -471,23 +489,291 @@ export async function applyReferenceRewrite(
   options: ApplyReferenceRewriteOptions = {}
 ): Promise<ApplyReferenceRewriteResult> {
   const writeMode = options.writeMode === "replace" ? "replace" : "sidecar";
+  const removeUnresolved = options.removeUnresolved ?? false;
   const plan = await planReferenceRewrite(inputPath, {
     ...options,
     writeMode
   });
+
+  const allEntries = plan.analysis.reviewSummary.entries;
+  const unresolvedStatuses = new Set(["unresolved", "not_checked"]);
+  const entriesToRemove = removeUnresolved
+    ? allEntries.filter((e) => unresolvedStatuses.has(e.status))
+    : [];
+  const removedKeys = new Set(entriesToRemove.map((e) => e.originalKey ?? e.suggestedKey));
+  const removedIndexes = new Set(entriesToRemove.map((e) => e.entryIndex));
+  const removedEntries = entriesToRemove.map((e) => ({
+    entryIndex: e.entryIndex,
+    key: e.originalKey ?? e.suggestedKey,
+    reason: `status: ${e.status}`
+  }));
+
   const applicablePatches = plan.writePlan.patches.filter((patch) => patch.applicable);
+  if (removeUnresolved && removedIndexes.size > 0) {
+    for (const patch of applicablePatches) {
+      patch.previewText = filterPatchContent(
+        patch.previewText,
+        removedIndexes,
+        plan.analysis.executionSummary.selectedFileOutputFormat
+      );
+    }
+  }
   for (const patch of applicablePatches) {
     if (patch.patchKind === "replace_bib_file" || patch.patchKind === "write_sidecar_bib") {
       await writeFile(patch.targetFile, patch.previewText, "utf8");
     }
   }
+
+  const citationKeyRewrites: CitationKeyRewrite[] = [];
+  const citationRemovals: CitationRemoval[] = [];
+  const changedKeys = plan.replacementPlan.keyMapping.filter((m) => m.changed && m.originalKey);
+  const selectedFile = plan.analysis.documentSelection.selectedFile;
+  const detectedFormat = plan.analysis.referenceExtraction.detectedFormat;
+
+  if (applicablePatches.length > 0) {
+    if ((detectedFormat === "bib" || detectedFormat === "tex") && (changedKeys.length > 0 || removedKeys.size > 0)) {
+      const citingFiles = await findCitingFiles(selectedFile);
+      for (const texFile of citingFiles) {
+        if (changedKeys.length > 0) {
+          const rewrites = await rewriteCitationKeys(texFile, changedKeys);
+          if (rewrites.length > 0) {
+            citationKeyRewrites.push({ file: texFile, replacements: rewrites });
+          }
+        }
+        if (removedKeys.size > 0) {
+          const removal = await removeTexCitations(texFile, removedKeys);
+          if (removal) {
+            citationRemovals.push(removal);
+          }
+        }
+      }
+    }
+
+    if ((detectedFormat === "md" || detectedFormat === "txt") && removedIndexes.size > 0) {
+      const paperFile = plan.analysis.documentSelection.selectedFile;
+      const removal = await removeNumberedCitations(paperFile, removedIndexes, allEntries.length);
+      if (removal) {
+        citationRemovals.push(removal);
+      }
+    }
+  }
+
   return {
     applied: applicablePatches.length > 0,
     writeMode,
-    targetFilesWritten: applicablePatches.map((patch) => patch.targetFile),
+    targetFilesWritten: [
+      ...applicablePatches.map((patch) => patch.targetFile),
+      ...citationKeyRewrites.map((r) => r.file),
+      ...citationRemovals.map((r) => r.file)
+    ],
     replacementStatus: plan.replacementPlan.status,
-    patches: plan.writePlan.patches
+    patches: plan.writePlan.patches,
+    citationKeyRewrites,
+    citationRemovals,
+    removedEntries
   };
+}
+
+function filterPatchContent(content: string, removedIndexes: Set<number>, format: "bibtex" | "numbered"): string {
+  if (format === "bibtex") {
+    const entries = content.split(/\n(?=@)/);
+    return entries.filter((_, i) => !removedIndexes.has(i)).join("\n");
+  }
+  const lines = content.split("\n");
+  const kept = lines.filter((_, i) => !removedIndexes.has(i));
+  return renumberLines(kept);
+}
+
+function renumberLines(lines: string[]): string {
+  let num = 1;
+  return lines.map((line) => {
+    const renumbered = line.replace(/^\s*(\[\d+\]|\d+\.)\s*/, () => `${num}. `);
+    if (renumbered !== line) {
+      num++;
+    }
+    return renumbered;
+  }).join("\n");
+}
+
+async function removeTexCitations(texFile: string, removedKeys: Set<string>): Promise<CitationRemoval | undefined> {
+  let content: string;
+  try {
+    content = await readFile(texFile, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  const removedList = [...removedKeys];
+  let updated = content;
+
+  const citePattern = new RegExp(`\\\\(?:${TEX_CITE_COMMANDS})(?:\\[[^\\]]*\\])*\\{([^}]+)\\}`, "g");
+
+  updated = updated.replace(citePattern, (match, keysStr: string) => {
+    const keys = keysStr.split(",").map((k: string) => k.trim());
+    const remaining = keys.filter((k: string) => !removedKeys.has(k));
+    if (remaining.length === 0) {
+      return "";
+    }
+    if (remaining.length === keys.length) {
+      return match;
+    }
+    return match.replace(keysStr, remaining.join(", "));
+  });
+
+  updated = updated.replace(/ {2,}/g, " ").replace(/ ([.,;])/g, "$1");
+
+  if (updated === content) {
+    return undefined;
+  }
+  await writeFile(texFile, updated, "utf8");
+  return { file: texFile, removedKeys: removedList, removedNumbers: [], renumberMap: [] };
+}
+
+async function removeNumberedCitations(
+  paperFile: string,
+  removedIndexes: Set<number>,
+  totalEntries: number
+): Promise<CitationRemoval | undefined> {
+  let content: string;
+  try {
+    content = await readFile(paperFile, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  const removedNumbers = [...removedIndexes].map((i) => i + 1);
+  const renumberLookup = new Map<number, number>();
+  const renumberMap: Array<{ oldNumber: number; newNumber: number }> = [];
+  let newNum = 1;
+  for (let old = 1; old <= totalEntries; old++) {
+    if (removedIndexes.has(old - 1)) {
+      continue;
+    }
+    if (old !== newNum) {
+      renumberLookup.set(old, newNum);
+      renumberMap.push({ oldNumber: old, newNumber: newNum });
+    }
+    newNum++;
+  }
+
+  let updated = content;
+
+  const bracketPattern = /\[(\d+(?:\s*[,;–-]\s*\d+)*)\]/g;
+  updated = updated.replace(bracketPattern, (match, inner: string) => {
+    const nums = inner.split(/\s*[,;]\s*/).flatMap((part: string) => {
+      const range = part.match(/^(\d+)\s*[–-]\s*(\d+)$/);
+      if (range) {
+        const start = Number(range[1]);
+        const end = Number(range[2]);
+        const result: number[] = [];
+        for (let i = start; i <= end; i++) {
+          result.push(i);
+        }
+        return result;
+      }
+      const n = Number(part.trim());
+      return Number.isNaN(n) ? [] : [n];
+    });
+
+    const remaining = nums.filter((n: number) => !removedIndexes.has(n - 1));
+    if (remaining.length === 0) {
+      return "";
+    }
+
+    const remapped = remaining.map((n: number) => renumberLookup.get(n) ?? n)
+      .sort((a: number, b: number) => a - b);
+
+    return `[${formatNumberList(remapped)}]`;
+  });
+
+  updated = updated.replace(/ {2,}/g, " ").replace(/ ([.,;])/g, "$1");
+
+  if (updated === content) {
+    return undefined;
+  }
+  await writeFile(paperFile, updated, "utf8");
+  return { file: paperFile, removedKeys: [], removedNumbers, renumberMap };
+}
+
+function formatNumberList(nums: number[]): string {
+  if (nums.length === 0) {
+    return "";
+  }
+  const ranges: string[] = [];
+  let start = nums[0]!;
+  let end = start;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] === end + 1) {
+      end = nums[i]!;
+    } else {
+      ranges.push(start === end ? `${start}` : `${start}–${end}`);
+      start = nums[i]!;
+      end = start;
+    }
+  }
+  ranges.push(start === end ? `${start}` : `${start}–${end}`);
+  return ranges.join(", ");
+}
+
+async function findCitingFiles(bibFile: string): Promise<string[]> {
+  const bibDir = path.dirname(bibFile);
+  const bibName = path.basename(bibFile, ".bib");
+  const citing: string[] = [];
+  let entries: string[];
+  try {
+    entries = await readdir(bibDir);
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith(".tex")) {
+      continue;
+    }
+    const texPath = path.join(bibDir, entry);
+    try {
+      const content = await readFile(texPath, "utf8");
+      if (
+        content.includes(`\\bibliography{${bibName}}`) ||
+        content.includes(`\\addbibresource{${bibName}.bib}`) ||
+        content.includes(`\\addbibresource{${bibName}}`)
+      ) {
+        citing.push(texPath);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return citing;
+}
+
+async function rewriteCitationKeys(
+  texFile: string,
+  changedKeys: RepairKeyMapping[]
+): Promise<Array<{ oldKey: string; newKey: string }>> {
+  let content: string;
+  try {
+    content = await readFile(texFile, "utf8");
+  } catch {
+    return [];
+  }
+  const applied: Array<{ oldKey: string; newKey: string }> = [];
+  let updated = content;
+  for (const mapping of changedKeys) {
+    if (!mapping.originalKey) {
+      continue;
+    }
+    const escaped = mapping.originalKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(?<=\\\\(?:${TEX_CITE_COMMANDS})(?:\\[[^\\]]*\\])*\\{[^}]*)\\b${escaped}\\b`, "g");
+    const before = updated;
+    updated = updated.replace(pattern, mapping.suggestedKey);
+    if (updated !== before) {
+      applied.push({ oldKey: mapping.originalKey, newKey: mapping.suggestedKey });
+    }
+  }
+  if (applied.length > 0) {
+    await writeFile(texFile, updated, "utf8");
+  }
+  return applied;
 }
 
 function toAnalyzeReferencesResult(inputPath: string, payload: RepairPaperJsonResult): AnalyzeReferencesResult {

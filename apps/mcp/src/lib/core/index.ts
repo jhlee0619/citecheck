@@ -523,6 +523,9 @@ export function scoreComparison(comparison: CandidateComparison, candidate: Cand
 
 export function deriveIssues(query: NormalizedQuery, candidate: CandidateRecord, comparison: CandidateComparison): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  const hasStrongMatch = Object.values(comparison.identifierMatches).some(Boolean);
+  const metadataSeverity = hasStrongMatch ? "info" : "warning";
+
   if (query.doi && !comparison.identifierMatches.doi) {
     issues.push({
       code: "doi_mismatch",
@@ -566,7 +569,7 @@ export function deriveIssues(query: NormalizedQuery, candidate: CandidateRecord,
   if (comparison.titleSimilarity < 0.75 && query.title) {
     issues.push({
       code: "title_mismatch",
-      severity: "warning",
+      severity: hasStrongMatch ? "info" : "warning",
       field: "title",
       observed: query.title,
       expected: candidate.title,
@@ -576,7 +579,7 @@ export function deriveIssues(query: NormalizedQuery, candidate: CandidateRecord,
   if (comparison.authorOverlap < 0.5 && query.authors.length > 0) {
     issues.push({
       code: "author_mismatch",
-      severity: "warning",
+      severity: metadataSeverity,
       field: "authors",
       observed: query.authors.join(", "),
       expected: candidate.authors.join(", "),
@@ -596,7 +599,7 @@ export function deriveIssues(query: NormalizedQuery, candidate: CandidateRecord,
   if (comparison.journalMatch === false) {
     issues.push({
       code: "journal_mismatch",
-      severity: "warning",
+      severity: metadataSeverity,
       field: "journal",
       observed: query.journal,
       expected: candidate.journal,
