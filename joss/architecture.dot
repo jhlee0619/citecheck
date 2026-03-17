@@ -24,7 +24,7 @@ digraph citecheck {
     color="#3182ce";
     fillcolor="#ebf8ff";
 
-    tools [label="MCP Tools\nscan_workspace | analyze_references\nplan_reference_rewrite | apply_reference_rewrite", shape=record, fillcolor="#bee3f8"];
+    tools [label="MCP Tools\nscan_workspace | analyze_references\nplan_reference_rewrite | apply_reference_rewrite\nrepair_paper | citecheck_version", shape=record, fillcolor="#bee3f8"];
     repair [label="Repair API\n(extraction, linting,\nformat detection)", fillcolor="#bee3f8"];
     runtime [label="Verification Runtime\n(multi-pass orchestration,\ncandidate clustering)", fillcolor="#90cdf4"];
     policy [label="Policy Engine\n(batch quality gates,\nexit decisions)", fillcolor="#90cdf4"];
@@ -66,5 +66,5 @@ digraph citecheck {
   runtime -> crossref [label="", style=dashed];
   runtime -> arxiv [label="", style=dashed];
   runtime -> semantic [label="", style=dashed];
-  tools -> agent [label="JSON / BibTeX /\nNumbered / Markdown", style=dotted, dir=back];
+  tools -> agent [label="JSON / BibTeX / Numbered\nMarkdown / ENW", style=dotted, dir=back];
 }
