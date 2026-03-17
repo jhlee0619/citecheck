@@ -233,6 +233,7 @@ export interface FieldTrustProfile {
 export interface RenderedCitation {
   bibtex: string;
   numbered: string;
+  markdown: string;
   enw: string;
   cslJson: Record<string, unknown>;
 }
@@ -823,6 +824,7 @@ export function renderCitation(candidate: CandidateRecord): RenderedCitation {
   return {
     bibtex: `@article{${citeKey(candidate)},\n  ${fields.join(",\n  ")}\n}`,
     numbered: `${authors}. ${candidate.title}.${candidate.journal ? ` ${candidate.journal}.` : ""}${candidate.year ? ` ${candidate.year}.` : ""}${candidate.doi ? ` doi:${candidate.doi}.` : ""}`.trim(),
+    markdown: `${authors}. **${candidate.title}**.${candidate.journal ? ` *${candidate.journal}*.` : ""}${candidate.year ? ` ${candidate.year}.` : ""}${candidate.doi ? ` [doi:${candidate.doi}](https://doi.org/${candidate.doi})` : ""}`.trim(),
     enw: enwLines.join("\n"),
     cslJson: {
       type: "article-journal",

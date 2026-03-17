@@ -7,12 +7,12 @@ describe("runtime factory", () => {
     const config = defaultRuntimeFactoryConfig();
     const summary = summarizeEffectiveRuntimeConfig(config);
 
-    expect(config.batchConcurrency).toBe(2);
+    expect(config.batchConcurrency).toBe(5);
     expect(config.httpMaxRetries).toBe(2);
-    expect(config.sourceHttpPolicies.crossref?.minIntervalMs).toBe(1_000);
-    expect(config.sourceHttpPolicies.pubmed?.minIntervalMs).toBe(1_000);
+    expect(config.sourceHttpPolicies.crossref?.minIntervalMs).toBe(200);
+    expect(config.sourceHttpPolicies.pubmed?.minIntervalMs).toBe(350);
     expect(summary).toMatchObject({
-      batchConcurrency: 2,
+      batchConcurrency: 5,
       httpMaxRetries: 2
     });
   });

@@ -18,7 +18,7 @@ const SERVER_VERSION = "0.1.0";
 const repairPaperSchema = {
   target_path: z.string().describe("Path to the paper file or project folder to inspect."),
   mode: z.enum(["review", "replacement"]).optional().default("review").describe("Review findings first or attempt replacement-safe output."),
-  output_format: z.enum(["json", "bibtex", "numbered", "enw"]).optional().default("json").describe("Preferred citecheck output format."),
+  output_format: z.enum(["json", "bibtex", "numbered", "markdown", "enw"]).optional().default("json").describe("Preferred citecheck output format."),
   policy: z.enum(["default", "strict", "lenient"]).optional().describe("Batch policy preset."),
   fixture_mode: z.enum(["off", "prefer", "only"]).optional().describe("Fixture replay mode."),
   fixture_manifest: z.string().optional().describe("Optional fixture manifest path.")

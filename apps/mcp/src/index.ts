@@ -8,6 +8,7 @@ import {
   normalizeText,
   renderCitation,
   type BatchResult,
+  type NormalizedQuery,
   type ReferenceInput,
   type SourceFailureClass,
   type ValidationResult,
@@ -50,7 +51,7 @@ const TEX_CITE_COMMANDS = "cite|citep|citet|citealt|citealp|citeauthor|citeyear|
 
 type SupportedExtension = (typeof SUPPORTED_EXTENSIONS)[number];
 type DetectedFormat = "bib" | "tex" | "md" | "txt" | "docx";
-type RepairOutputFormat = "json" | "bibtex" | "numbered" | "enw";
+type RepairOutputFormat = "json" | "bibtex" | "numbered" | "markdown" | "enw";
 type RepairMode = "review" | "replacement";
 type WriteMode = "preview" | "sidecar" | "replace";
 type ReviewStatus = "matched" | "changed" | "ambiguous" | "unresolved" | "unsafe_for_replacement";
@@ -111,6 +112,7 @@ export interface RepairEntry {
   bibliographyLintFindings: string[];
   fieldDiffs: RepairFieldDiff[];
   corrected: string;
+  correctedMarkdown?: string;
   correctedEnw?: string;
   replacementBibtex?: string;
   outputFormat: "bibtex" | "numbered";
@@ -329,6 +331,7 @@ interface RepairDraft {
   bibliographyLintFindings: string[];
   fieldDiffs: RepairFieldDiff[];
   corrected: string;
+  correctedMarkdown?: string;
   correctedEnw?: string;
   replacementBibtex?: string;
 }
@@ -839,9 +842,12 @@ function buildCorrectedEntry(result: ValidationResult, outputFormat: "bibtex" | 
   return outputFormat === "bibtex" ? rendered.bibtex : rendered.numbered;
 }
 
-function convertRepairEntryOutput(entry: RepairEntry, outputFormat: "bibtex" | "numbered" | "enw"): string {
+function convertRepairEntryOutput(entry: RepairEntry, outputFormat: "bibtex" | "numbered" | "markdown" | "enw"): string {
   if (outputFormat === "enw") {
     return entry.correctedEnw ?? entry.original;
+  }
+  if (outputFormat === "markdown") {
+    return entry.correctedMarkdown ?? entry.original;
   }
   if (outputFormat === "bibtex" && entry.replacementBibtex) {
     return entry.replacementBibtex;
@@ -864,9 +870,10 @@ function buildRepairDraft(
   const corrected = rendered
     ? (outputFormat === "bibtex" ? rendered.bibtex : rendered.numbered)
     : result.input.raw;
+  const correctedMarkdown = rendered?.markdown;
   const correctedEnw = rendered?.enw;
   const fieldDiffs = buildFieldDiffs(input, result, originalBib);
-  const bibliographyLintFindings = buildBibliographyLintFindings(input, originalBib);
+  const bibliographyLintFindings = buildBibliographyLintFindings(input, originalBib, result.query);
   const manifestationDecision = deriveManifestationDecision(result, originalBib);
   const manifestationConflict = detectManifestationConflict(result, originalBib, manifestationDecision);
   const matchedWorkConfidence = deriveMatchedWorkConfidence(result);
@@ -895,6 +902,7 @@ function buildRepairDraft(
     bibliographyLintFindings,
     fieldDiffs,
     corrected,
+    correctedMarkdown,
     correctedEnw,
     replacementBibtex: buildReplacementBibtex(result, originalBib)
   };
@@ -926,6 +934,7 @@ function finalizeRepairEntry(draft: RepairDraft, suggestedKey: string, mode: Rep
     bibliographyLintFindings: draft.bibliographyLintFindings,
     fieldDiffs: draft.fieldDiffs,
     corrected: mode === "replacement" && replacementBibtex ? replacementBibtex : draft.corrected,
+    correctedMarkdown: draft.correctedMarkdown,
     correctedEnw: draft.correctedEnw,
     replacementBibtex,
     outputFormat: draft.outputFormat
@@ -942,8 +951,12 @@ function buildProposedOutput(
     return "";
   }
   return entries
-    .filter((entry) => mode !== "replacement" || replacementStatus === "ready" || entry.replacementEligibility === "safe")
-    .map((entry) => (mode === "replacement" && entry.replacementBibtex ? entry.replacementBibtex : entry.corrected))
+    .map((entry) => {
+      if (mode === "replacement" && entry.replacementEligibility === "blocked") {
+        return entry.original;
+      }
+      return mode === "replacement" && entry.replacementBibtex ? entry.replacementBibtex : entry.corrected;
+    })
     .join(outputFormat === "bibtex" ? "\n\n" : "\n");
 }
 
@@ -952,7 +965,7 @@ function determineReplacementStatus(
   unsafeEntries: UnsafeEntry[],
   duplicateKeys: DuplicateKeyInfo[]
 ): ReplacementStatus {
-  if (duplicateKeys.length > 0 || unsafeEntries.some((entry) => entry.replacementEligibility === "blocked")) {
+  if (duplicateKeys.length > 0) {
     return "blocked";
   }
   if (mode === "review" || unsafeEntries.length > 0) {
@@ -1915,7 +1928,7 @@ function assessReplacementSafety(
     comparison.titleSimilarity >= 0.9 &&
     (comparison.authorOverlap < 0.75 || comparison.yearMatch === false || comparison.journalMatch === false);
   if (context.bibliographyLintFindings.length > 0) {
-    blockers.push(...context.bibliographyLintFindings);
+    reviewOnlyReasons.push(...context.bibliographyLintFindings);
   }
   if (context.manifestationConflict) {
     reviewOnlyReasons.push(
@@ -2055,12 +2068,12 @@ function detectTypeVenueMismatch(originalBib?: OriginalBibEntry): string | undef
   return undefined;
 }
 
-function buildBibliographyLintFindings(input: ReferenceInput, originalBib?: OriginalBibEntry): string[] {
+function buildBibliographyLintFindings(input: ReferenceInput, originalBib?: OriginalBibEntry, query?: NormalizedQuery): string[] {
   const findings = [
     detectKeyYearMismatch(originalBib),
     detectTypeVenueMismatch(originalBib),
     detectAuthorFormatIssue(originalBib),
-    detectMissingStrongIdentifier(input, originalBib),
+    detectMissingStrongIdentifier(input, originalBib, query),
     detectMissingVenueMetadata(originalBib)
   ].filter((finding): finding is string => finding !== undefined);
   return [...new Set(findings)];
@@ -2077,10 +2090,10 @@ function detectAuthorFormatIssue(originalBib?: OriginalBibEntry): string | undef
   return undefined;
 }
 
-function detectMissingStrongIdentifier(input: ReferenceInput, originalBib?: OriginalBibEntry): string | undefined {
+function detectMissingStrongIdentifier(input: ReferenceInput, originalBib?: OriginalBibEntry, query?: NormalizedQuery): string | undefined {
   const fields = originalBib?.fields ?? {};
   const hasIdentifier =
-    Boolean(fields.doi || fields.pmid || fields.pmcid || fields.eprint || ("doi" in input && input.doi) || ("pmid" in input && input.pmid) || ("pmcid" in input && input.pmcid) || ("arxivId" in input && input.arxivId));
+    Boolean(fields.doi || fields.pmid || fields.pmcid || fields.eprint || ("doi" in input && input.doi) || ("pmid" in input && input.pmid) || ("pmcid" in input && input.pmcid) || ("arxivId" in input && input.arxivId) || query?.doi || query?.pmid || query?.pmcid || query?.arxivId);
   if (!hasIdentifier) {
     return "entry is missing a strong identifier such as DOI, PMID, PMCID, or arXiv id";
   }

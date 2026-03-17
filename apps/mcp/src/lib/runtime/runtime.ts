@@ -60,9 +60,13 @@ export class CitecheckRuntime {
       const connectors = plan.sources.map((source) => this.connectors.get(source)).filter(Boolean) as ReferenceConnector[];
       const sourceOutcomes: DecisionTrace["sourceOutcomes"] = [];
 
-      for (const connector of connectors) {
-        try {
-          const result = await connector.search(query);
+      const settledResults = await Promise.allSettled(
+        connectors.map((connector) => connector.search(query))
+      );
+      for (const [i, settled] of settledResults.entries()) {
+        const connector = connectors[i]!;
+        if (settled.status === "fulfilled") {
+          const result = settled.value;
           allCandidates.push(...result.candidates);
           retractionStatus = mergeTriState(retractionStatus, result.retractionStatus);
           erratumStatus = mergeTriState(erratumStatus, result.erratumStatus);
@@ -80,8 +84,8 @@ export class CitecheckRuntime {
                 ? `returned ${result.candidates.length} candidate(s)`
                 : result.sourceWarnings?.join("; ") || "connector returned no candidates"
           });
-        } catch (error) {
-          const connectorError = toConnectorError(error, connector.source);
+        } else {
+          const connectorError = toConnectorError(settled.reason, connector.source);
           sourceOutcomes.push({
             source: connector.source,
             status: "failed",

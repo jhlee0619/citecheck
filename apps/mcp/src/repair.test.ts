@@ -117,7 +117,7 @@ describe("repairPaper", () => {
 
     const payload = await repairPaper(bibPath, { mode: "replacement" });
 
-    expect(payload.replacementStatus).toBe("blocked");
+    expect(payload.replacementStatus).toBe("partial");
     expect(payload.unsafeEntries[0]?.reasons[0]).toContain("existing key year 2023 does not match entry year 2024");
   });
 

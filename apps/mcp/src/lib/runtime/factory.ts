@@ -39,7 +39,7 @@ export function defaultRuntimeFactoryConfig(): RuntimeFactoryConfig {
     enableCrossref: true,
     enableArxiv: true,
     enableSemanticScholar: false,
-    batchConcurrency: 2,
+    batchConcurrency: 5,
     httpTimeoutMs: 10_000,
     httpMaxRetries: 2,
     userAgent: "citecheck/0.1.0",
@@ -48,22 +48,22 @@ export function defaultRuntimeFactoryConfig(): RuntimeFactoryConfig {
       pubmed: {
         retries: 2,
         backoffMs: 2_000,
-        minIntervalMs: 1_000
+        minIntervalMs: 350
       },
       crossref: {
         retries: 2,
         backoffMs: 2_000,
-        minIntervalMs: 1_000
+        minIntervalMs: 200
       },
       arxiv: {
         retries: 1,
         backoffMs: 1_000,
-        minIntervalMs: 500
+        minIntervalMs: 350
       },
       semantic_scholar: {
         retries: 2,
         backoffMs: 2_000,
-        minIntervalMs: 1_000
+        minIntervalMs: 500
       }
     },
     fixtureMode: "off",
