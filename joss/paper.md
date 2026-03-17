@@ -59,7 +59,7 @@ Automated bibliography replacement is risky because a misidentified candidate ca
 
 ## Architecture
 
-The codebase, illustrated in \autoref{fig:architecture}, is organized into four modules. The Connectors module contains HTTP clients implementing a shared `ReferenceConnector` interface with per-source rate limiting. The Core module handles normalization, Jaccard-based similarity scoring, candidate clustering, and evidence building. The Runtime module manages multi-pass orchestration with configurable batch concurrency. The Policy module provides batch-level quality gates. The MCP server exposes six tools following a progressive-disclosure workflow, documented in the project README. Output is available in JSON, BibTeX, numbered text, Markdown, or EndNote format.
+The codebase comprises approximately 5,600 lines of TypeScript (excluding tests) and is organized, as illustrated in \autoref{fig:architecture}, into four modules. The Connectors module contains HTTP clients implementing a shared `ReferenceConnector` interface with per-source rate limiting. The Core module handles normalization, Jaccard-based similarity scoring, candidate clustering, and evidence building. The Runtime module manages multi-pass orchestration with configurable batch concurrency. The Policy module provides batch-level quality gates. The MCP server exposes six tools following a progressive-disclosure workflow, documented in the project README. Output is available in JSON, BibTeX, numbered text, Markdown, or EndNote format.
 
 ![Simplified architecture of citecheck. The MCP server delegates to the repair API. The runtime orchestrates multi-pass verification across four external connectors, with results evaluated by the policy engine.\label{fig:architecture}](architecture.png){ width=80% }
 
@@ -71,7 +71,7 @@ The tool is published on npm as `@citecheck/mcp` and can be installed as an MCP 
 
 # AI Usage Disclosure
 
-Generative AI tools, specifically Claude Code with Claude Opus 4, were used during the development of `citecheck` for code generation assistance, test scaffolding, and iterative debugging. All AI-generated code was reviewed, tested, and validated by the author. A test suite containing 47 unit and integration tests plus over 40 fixture-based regression scenarios was used to verify correctness throughout development. This paper was drafted with AI assistance and reviewed by the author for accuracy and completeness.
+Generative AI tools, specifically Claude Code with Claude Opus 4, were used during the development of `citecheck` for code generation assistance, test scaffolding, and iterative debugging. All AI-generated code was reviewed, tested, and validated by the author. A test suite containing 47 unit and integration tests plus 12 fixture-based regression scenarios was used to verify correctness throughout development. This paper was drafted with AI assistance and reviewed by the author for accuracy and completeness.
 
 # Acknowledgements
 

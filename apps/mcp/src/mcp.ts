@@ -13,7 +13,7 @@ import {
 } from "./index.js";
 
 const SERVER_NAME = "citecheck-mcp";
-const SERVER_VERSION = "0.1.0";
+const SERVER_VERSION = "0.1.12";
 
 const repairPaperSchema = {
   target_path: z.string().describe("Path to the paper file or project folder to inspect."),
