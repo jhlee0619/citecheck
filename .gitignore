@@ -4,3 +4,4 @@ apps/mcp/dist/
 *.tgz
 npm-debug.log*
 .DS_Store
+REDEPLOY.md

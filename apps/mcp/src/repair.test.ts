@@ -95,6 +95,24 @@ describe("repairPaper", () => {
     expect(payload.candidateFiles.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("ignores hidden files during automatic project scanning", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-hidden-scan-"));
+    await writeFile(
+      path.join(tempDir, ".paper.md"),
+      ["# Draft", "", "## References", "", "Hidden J. Hidden reference. 2024. doi:10.1000/hidden."].join("\n")
+    );
+    const visiblePath = path.join(tempDir, "paper.md");
+    await writeFile(
+      visiblePath,
+      ["# Draft", "", "## References", "", "Smith J. Deep imaging biomarkers in glioma. 2024. doi:10.1000/xyz123."].join("\n")
+    );
+
+    const payload = await repairPaper(tempDir);
+
+    expect(payload.selectedFile).toBe(visiblePath);
+    expect(payload.candidateFiles.some((candidate) => path.basename(candidate.path).startsWith("."))).toBe(false);
+  });
+
   it("extracts a references section from markdown and emits numbered output", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-repair-md-"));
     const filePath = path.join(tempDir, "paper.md");

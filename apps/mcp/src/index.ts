@@ -261,6 +261,9 @@ async function collectCandidateFiles(rootPath: string): Promise<CandidateFile[]>
     const current = directories.pop()!;
     const entries = await readdir(current, { withFileTypes: true });
     for (const entry of entries) {
+      if (isHiddenPathEntry(entry.name)) {
+        continue;
+      }
       const absolute = path.join(current, entry.name);
       if (entry.isDirectory()) {
         if (!SKIPPED_DIRECTORIES.has(entry.name)) {
@@ -279,6 +282,10 @@ async function collectCandidateFiles(rootPath: string): Promise<CandidateFile[]>
     }
   }
   return candidates;
+}
+
+function isHiddenPathEntry(name: string): boolean {
+  return name.startsWith(".");
 }
 
 function normalizeSupportedExtension(value: string): SupportedExtension | undefined {
