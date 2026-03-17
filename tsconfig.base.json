@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@citecheck/core": ["apps/mcp/src/lib/core/index.ts"],
+      "@citecheck/connectors": ["apps/mcp/src/lib/connectors/index.ts"],
+      "@citecheck/runtime": ["apps/mcp/src/lib/runtime/index.ts"],
+      "@citecheck/policy": ["apps/mcp/src/lib/policy/index.ts"],
+      "@citecheck/mcp": ["apps/mcp/src/mcp.ts"],
+      "@citecheck/repair": ["apps/mcp/src/index.ts"]
+    },
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
+  }
+}

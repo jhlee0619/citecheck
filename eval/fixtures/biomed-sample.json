@@ -1,0 +1,7 @@
+[
+  {
+    "input": "Smith J, Doe A. Deep imaging biomarkers in glioma. Neuroradiology. 2024. doi:10.1000/xyz123.",
+    "expectedDoi": "10.1000/xyz123",
+    "expectedStatus": "verified"
+  }
+]

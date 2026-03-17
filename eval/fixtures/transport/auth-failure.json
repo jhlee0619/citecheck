@@ -1,0 +1,6 @@
+{
+  "source": "pubmed",
+  "failureClass": "auth_failure",
+  "failureReason": "http_error",
+  "retryable": false
+}

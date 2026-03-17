@@ -1,0 +1,13 @@
+{
+  "result": {
+    "uids": ["12345678"],
+    "12345678": {
+      "uid": "12345678",
+      "title": "Deep imaging biomarkers in glioma",
+      "fulljournalname": "Neuroradiology",
+      "pubdate": "2023 Dec",
+      "authors": [{ "name": "Smith J" }, { "name": "Doe A" }],
+      "articleids": [{ "idtype": "doi", "value": "10.1000/xyz123" }]
+    }
+  }
+}

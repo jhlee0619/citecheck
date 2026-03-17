@@ -1,0 +1,6 @@
+node_modules/
+apps/mcp/dist/
+*.tsbuildinfo
+*.tgz
+npm-debug.log*
+.DS_Store

@@ -1,0 +1,6 @@
+{
+  "source": "semantic_scholar",
+  "failureClass": "rate_limit_failure",
+  "failureReason": "http_error",
+  "retryable": true
+}

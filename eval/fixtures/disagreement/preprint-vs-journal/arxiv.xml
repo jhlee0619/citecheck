@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.12345v1</id>
+    <published>2024-01-10T00:00:00Z</published>
+    <title>Deep imaging biomarkers in glioma</title>
+    <author><name>Smith J</name></author>
+    <author><name>Doe A</name></author>
+  </entry>
+</feed>

@@ -1,0 +1,60 @@
+{
+  "name": "@citecheck/mcp",
+  "description": "MCP server for automatic paper reference repair.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "bin",
+    "src/index.ts",
+    "src/mcp.ts",
+    "src/lib/connectors/arxiv.ts",
+    "src/lib/connectors/crossref.ts",
+    "src/lib/connectors/http.ts",
+    "src/lib/connectors/index.ts",
+    "src/lib/connectors/memory-connector.ts",
+    "src/lib/connectors/pubmed.ts",
+    "src/lib/connectors/semantic-scholar.ts",
+    "src/lib/connectors/types.ts",
+    "src/lib/core/index.ts",
+    "src/lib/policy/index.ts",
+    "src/lib/policy/policy.ts",
+    "src/lib/runtime/factory.ts",
+    "src/lib/runtime/fixture-registry.ts",
+    "src/lib/runtime/index.ts",
+    "src/lib/runtime/runtime.ts"
+  ],
+  "bin": {
+    "citecheck-mcp": "bin/citecheck-mcp.js"
+  },
+  "main": "./src/mcp.ts",
+  "types": "./src/mcp.ts",
+  "keywords": [
+    "mcp",
+    "references",
+    "bibliography",
+    "citations",
+    "papers"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepublishOnly": "npm --prefix ../.. run verify"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/mcp.ts",
+      "default": "./src/mcp.ts"
+    },
+    "./repair": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "tsx": "^4.19.3",
+    "zod": "^4.3.6"
+  }
+}

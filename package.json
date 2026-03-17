@@ -1,0 +1,22 @@
+{
+  "name": "citecheck-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",
+    "test:gold": "node ./node_modules/vitest/vitest.mjs run eval/eval.test.ts",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "verify": "npm run check && npm run test && npm run test:gold"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}
