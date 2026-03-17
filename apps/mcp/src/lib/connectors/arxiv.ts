@@ -27,15 +27,44 @@ export class ArxivConnector implements ReferenceConnector {
     }
     const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1]);
     if (entries.length === 0) {
-      throw new ConnectorPayloadError(this.source, "missing_required_top_level", "missing entry elements");
+      return {
+        source: this.source,
+        candidates: [],
+        retractionStatus: "not_checked",
+        erratumStatus: "not_checked",
+        sourceWarnings: ["arXiv returned no matches"]
+      };
     }
-    const candidates = entries.map((entry, index) => normalizeCandidate(this.toCandidate(entry, index)));
+    const candidates: CandidateRecord[] = [];
+    const malformedEntries: string[] = [];
+    for (const [index, entry] of entries.entries()) {
+      try {
+        candidates.push(normalizeCandidate(this.toCandidate(entry, index)));
+      } catch (error) {
+        if (error instanceof ConnectorPayloadError) {
+          malformedEntries.push(error.message);
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    const sourceWarnings: string[] = [];
+    if (candidates.length === 0) {
+      sourceWarnings.push("arXiv returned no usable matches");
+    } else {
+      sourceWarnings.push("manifestation source");
+    }
+    if (malformedEntries.length > 0) {
+      sourceWarnings.push(`skipped ${malformedEntries.length} malformed arXiv entr${malformedEntries.length === 1 ? "y" : "ies"}`);
+    }
+
     return {
       source: this.source,
       candidates,
       retractionStatus: "not_checked",
       erratumStatus: "not_checked",
-      sourceWarnings: candidates.length === 0 ? ["arXiv returned no matches"] : ["manifestation source"]
+      sourceWarnings
     };
   }
 

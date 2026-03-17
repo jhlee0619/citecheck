@@ -3,6 +3,7 @@ import { FetchHttpClient, HttpError, RetryingHttpClient, maskSourcePolicies } fr
 
 describe("http policy support", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -56,5 +57,65 @@ describe("http policy support", () => {
 
     expect(body).toBe("{}");
     expect(inner.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("respects retry-after on rate limited responses", async () => {
+    vi.useFakeTimers();
+    const inner = {
+      get: vi
+        .fn()
+        .mockRejectedValueOnce(new HttpError("crossref", 429, "Too Many Requests", 2_000))
+        .mockResolvedValueOnce("{}")
+    };
+    const client = new RetryingHttpClient(inner, {
+      retries: 1,
+      backoffMs: 50
+    });
+
+    const pending = client.get({
+      source: "crossref",
+      url: new URL("https://api.crossref.org/works")
+    });
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(inner.get).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toBe("{}");
+    expect(inner.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("throttles consecutive requests for the same source", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new FetchHttpClient({
+      sourcePolicies: {
+        crossref: {
+          minIntervalMs: 1_000
+        }
+      }
+    });
+
+    const first = client.get({
+      source: "crossref",
+      url: new URL("https://api.crossref.org/works?query=one")
+    });
+    await Promise.resolve();
+    await first;
+
+    const second = client.get({
+      source: "crossref",
+      url: new URL("https://api.crossref.org/works?query=two")
+    });
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await second;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

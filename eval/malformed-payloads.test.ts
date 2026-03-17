@@ -114,7 +114,7 @@ describe("malformed payload regression", () => {
     });
   });
 
-  it("classifies arXiv missing id/title shape as payload_shape_failure", async () => {
+  it("treats arXiv malformed entries as skipped unusable matches", async () => {
     const connector = new ArxivConnector({
       httpClient: new FixtureHttpClient({
         "https://export.arxiv.org/api/query": `<?xml version="1.0" encoding="UTF-8"?>
@@ -143,9 +143,9 @@ describe("malformed payload regression", () => {
         pmcid: undefined,
         arxivId: undefined
       })
-    ).rejects.toMatchObject({
-      failureClass: "payload_shape_failure",
-      failureReason: "missing_required_entry_fields"
+    ).resolves.toMatchObject({
+      candidates: [],
+      sourceWarnings: expect.arrayContaining(["arXiv returned no usable matches"])
     });
   });
 

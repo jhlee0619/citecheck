@@ -1,10 +1,18 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
-import { parseReferenceInputs, repairPaper, renderRepairPaperResult } from "./index.js";
+import {
+  analyzeReferences,
+  applyReferenceRewrite,
+  parseReferenceInputs,
+  planReferenceRewrite,
+  repairPaper,
+  renderRepairPaperResult,
+  scanWorkspace
+} from "./index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -68,12 +76,98 @@ describe("repairPaper", () => {
     const payload = await repairPaper(bibPath);
 
     expect(payload.exitCode).toBe(0);
+    expect(payload.mode).toBe("review");
     expect(payload.selectedFile).toBe(bibPath);
     expect(payload.detectedFormat).toBe("bib");
     expect(payload.referencesExtracted).toBe(1);
     expect(payload.selectedFileOutputFormat).toBe("bibtex");
     expect(payload.entries[0]?.outputFormat).toBe("bibtex");
     expect(payload.entries[0]?.corrected).toContain("@article");
+    expect(payload.keyMapping[0]?.originalKey).toBe("demo");
+    expect(payload.manifestationPolicy).toBe("journal > conference > arXiv");
+    expect(payload.entries[0]?.strongIdentifierMatched).toBe(true);
+    expect(payload.verificationDegraded).toBe(false);
+  });
+
+  it("reports key remapping and replacement output in replacement mode", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-replacement-bib-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@article{demo,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  volume = {12},\n  pages = {1-10},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const payload = await repairPaper(bibPath, { mode: "replacement" });
+
+    expect(payload.mode).toBe("replacement");
+    expect(payload.replacementStatus).toBe("ready");
+    expect(payload.keyMapping[0]?.changed).toBe(true);
+    expect(payload.entries[0]?.replacementBibtex).toContain("@article{smith2024deep,");
+    expect(payload.entries[0]?.replacementBibtex).toContain("volume = {12}");
+    expect(payload.entries[0]?.replacementBibtex).toContain("pages = {1-10}");
+  });
+
+  it("blocks replacement when original key year mismatches the entry year", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-key-year-mismatch-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@article{smith2023deep,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const payload = await repairPaper(bibPath, { mode: "replacement" });
+
+    expect(payload.replacementStatus).toBe("blocked");
+    expect(payload.unsafeEntries[0]?.reasons[0]).toContain("existing key year 2023 does not match entry year 2024");
+  });
+
+  it("detects duplicate generated keys and blocks replacement", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-duplicate-key-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@article{demoa,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  doi = {10.1000/xyz123}\n}\n\n@article{demob,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const payload = await repairPaper(bibPath, { mode: "replacement" });
+
+    expect(payload.duplicateKeys).toHaveLength(1);
+    expect(payload.duplicateKeys[0]?.key).toBe("smith2024deep");
+    expect(payload.replacementStatus).toBe("blocked");
+  });
+
+  it("keeps manifestation conflicts in review-only state instead of auto-replacing", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-manifestation-conflict-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@inproceedings{demo,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  booktitle = {NeurIPS},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const payload = await repairPaper(bibPath, { mode: "replacement" });
+
+    expect(payload.replacementStatus).toBe("partial");
+    expect(payload.entries[0]?.replacementEligibility).toBe("review_only");
+    expect(payload.entries[0]?.manifestationConflict).toBe(true);
+    expect(payload.curationWorklist.some((item) => item.category === "manifestation_conflict")).toBe(true);
+  });
+
+  it("surfaces bibliography lint findings and curation work items", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-bib-lint-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@inproceedings{smith2023deep,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and others},\n  year = {2024},\n  booktitle = {arXiv preprint arXiv:2401.12345},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const payload = await repairPaper(bibPath);
+
+    expect(payload.bibliographyFindings.some((finding) => finding.code === "key_year_mismatch")).toBe(true);
+    expect(payload.bibliographyFindings.some((finding) => finding.code === "type_venue_mismatch")).toBe(true);
+    expect(payload.bibliographyFindings.some((finding) => finding.code === "author_format_cleanup")).toBe(true);
+    expect(payload.curationWorklist.some((item) => item.category === "key_consistency_cleanup")).toBe(true);
+    expect(payload.curationWorklist.some((item) => item.category === "author_format_cleanup")).toBe(true);
+    expect(payload.entries[0]?.bibliographyLintFindings.length).toBeGreaterThan(0);
   });
 
   it("chooses a bib file over a markdown file in a directory scan", async () => {
@@ -184,5 +278,66 @@ describe("repairPaper", () => {
 
     expect(payload.exitCode).toBe(2);
     expect(payload.policyResult.passed).toBe(false);
+  });
+
+  it("scans a workspace and returns candidate selection metadata", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-scan-workspace-"));
+    const bibPath = path.join(tempDir, "paper.references.bib");
+    await writeFile(bibPath, `@article{demo,\n  title = {Deep imaging biomarkers in glioma},\n  year = {2024}\n}`);
+    await writeFile(path.join(tempDir, "notes.md"), "# Notes");
+
+    const result = await scanWorkspace(tempDir);
+
+    expect(result.supportedFileFound).toBe(true);
+    expect(result.selectedFile).toBe(bibPath);
+    expect(result.candidateFiles.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns a structured analysis result", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-analyze-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@article{demo,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const result = await analyzeReferences(bibPath);
+
+    expect(result.documentSelection.selectedFile).toBe(bibPath);
+    expect(result.referenceExtraction.referencesExtracted).toBe(1);
+    expect(result.matchingSummary.manifestationPolicy).toBe("journal > conference > arXiv");
+    expect(result.reviewSummary.entries).toHaveLength(1);
+  });
+
+  it("builds a rewrite plan with sidecar patches", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-plan-rewrite-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    await writeFile(
+      bibPath,
+      `@article{demo,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  volume = {12},\n  pages = {1-10},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const result = await planReferenceRewrite(bibPath, { writeMode: "sidecar" });
+
+    expect(result.replacementPlan.status).toBe("ready");
+    expect(result.writePlan.patches[0]?.patchKind).toBe("write_sidecar_bib");
+    expect(result.writePlan.patches[0]?.applicable).toBe(true);
+  });
+
+  it("applies a sidecar bibliography rewrite", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "citecheck-apply-rewrite-"));
+    const bibPath = path.join(tempDir, "references.bib");
+    const sidecarPath = path.join(tempDir, "references.citecheck.fixed.bib");
+    await writeFile(
+      bibPath,
+      `@article{demo,\n  title = {Deep imaging biomarkers in glioma},\n  author = {Smith J and Doe A},\n  year = {2024},\n  journal = {Neuroradiology},\n  volume = {12},\n  pages = {1-10},\n  doi = {10.1000/xyz123}\n}`
+    );
+
+    const result = await applyReferenceRewrite(bibPath, { writeMode: "sidecar" });
+
+    expect(result.applied).toBe(true);
+    expect(result.targetFilesWritten).toContain(sidecarPath);
+    const written = await readFile(sidecarPath, "utf8");
+    expect(written).toContain("@article{smith2024deep,");
   });
 });

@@ -233,6 +233,7 @@ export interface FieldTrustProfile {
 export interface RenderedCitation {
   bibtex: string;
   numbered: string;
+  enw: string;
   cslJson: Record<string, unknown>;
 }
 
@@ -334,6 +335,11 @@ export function normalizeReferenceInput(input: ReferenceInput): NormalizedQuery 
   const authors = structured.authors?.map((author) => author.trim()).filter(Boolean) ?? [];
   const journal = structured.journal?.trim();
 
+  const arxivId =
+    normalizeArxivId(structured.arxivId) ??
+    normalizeArxivId(journal?.match(ARXIV_PATTERN)?.[1]) ??
+    normalizeArxivId(input.raw.match(ARXIV_PATTERN)?.[1]);
+
   return {
     kind: input.kind,
     raw: input.raw,
@@ -347,7 +353,7 @@ export function normalizeReferenceInput(input: ReferenceInput): NormalizedQuery 
     doi: normalizeDoi(structured.doi),
     pmid: normalizePmid(structured.pmid),
     pmcid: normalizePmcid(structured.pmcid),
-    arxivId: normalizeArxivId(structured.arxivId)
+    arxivId
   };
 }
 
@@ -377,22 +383,38 @@ export const BIOMEDICAL_TRUST_PROFILE: FieldTrustProfile = {
   journal: ["pubmed", "crossref", "semantic_scholar", "arxiv"]
 };
 
+function setOverlap(left: string[], right: string[]): { intersection: number; union: number; smallerSize: number } {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  const intersection = [...leftSet].filter((token) => rightSet.has(token)).length;
+  const union = leftSet.size + rightSet.size - intersection;
+  const smallerSize = Math.min(leftSet.size, rightSet.size);
+  return { intersection, union, smallerSize };
+}
+
 function jaccardScore(left: string[], right: string[]): number {
   if (left.length === 0 || right.length === 0) {
     return 0;
   }
-  const leftSet = new Set(left);
-  const rightSet = new Set(right);
-  const intersection = [...leftSet].filter((token) => rightSet.has(token)).length;
-  const union = new Set([...leftSet, ...rightSet]).size;
+  const { intersection, union } = setOverlap(left, right);
   return union === 0 ? 0 : intersection / union;
+}
+
+function titleSimilarityScore(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) {
+    return 0;
+  }
+  const { intersection, union, smallerSize } = setOverlap(left, right);
+  const jaccard = union === 0 ? 0 : intersection / union;
+  const containment = smallerSize === 0 ? 0 : intersection / smallerSize;
+  return jaccard * 0.5 + containment * 0.5;
 }
 
 export function compareCandidate(query: NormalizedQuery, candidate: CandidateRecord): CandidateComparison {
   const queryTitle = query.titleNormalized ?? "";
   const titleTokens = queryTitle.split(" ").filter(Boolean);
   const candidateTitleTokens = candidate.normalizedTitle.split(" ").filter(Boolean);
-  const titleSimilarity = queryTitle ? jaccardScore(titleTokens, candidateTitleTokens) : 0;
+  const titleSimilarity = queryTitle ? titleSimilarityScore(titleTokens, candidateTitleTokens) : 0;
   const authorOverlap = jaccardScore(query.authorTokens, candidate.normalizedAuthors);
 
   return {
@@ -474,11 +496,13 @@ export function buildEvidence(
 }
 
 export function scoreComparison(comparison: CandidateComparison, candidate: CandidateRecord): ConfidenceScores {
-  const identifierScore = Object.values(comparison.identifierMatches).some(Boolean) ? 1 : 0;
-  const retrieval = Math.min(
-    1,
-    identifierScore * 0.7 + comparison.titleSimilarity * 0.2 + comparison.authorOverlap * 0.1
-  );
+  const hasIdentifier = Object.values(comparison.identifierMatches).some(Boolean);
+  const yearBonus = comparison.yearMatch === null ? 0.5 : comparison.yearMatch ? 1 : 0;
+
+  const retrieval = hasIdentifier
+    ? Math.min(1, 0.7 + comparison.titleSimilarity * 0.2 + comparison.authorOverlap * 0.1)
+    : Math.min(1, comparison.titleSimilarity * 0.65 + comparison.authorOverlap * 0.25 + yearBonus * 0.1);
+
   const metadataConsistency = Math.max(
     0,
     Math.min(
@@ -596,13 +620,13 @@ export function deriveStatus(scores: ConfidenceScores, issues: ValidationIssue[]
   if (hasMajorContradiction) {
     return "needs_review";
   }
-  if (scores.retrieval >= 0.85 && scores.metadataConsistency >= 0.75 && !hasWarnings) {
+  if (scores.retrieval >= 0.7 && scores.metadataConsistency >= 0.6 && !hasWarnings) {
     return "verified";
   }
-  if (scores.retrieval >= 0.85 && scores.metadataConsistency >= 0.5) {
+  if (scores.retrieval >= 0.7 && scores.metadataConsistency >= 0.4) {
     return "verified_with_warnings";
   }
-  if (scores.retrieval >= 0.6) {
+  if (scores.retrieval >= 0.4) {
     return "needs_review";
   }
   return "unresolved";
@@ -783,9 +807,20 @@ export function renderCitation(candidate: CandidateRecord): RenderedCitation {
     candidate.doi ? `doi = {${candidate.doi}}` : undefined
   ].filter(Boolean);
 
+  const enwLines = [
+    "%0 Journal Article",
+    `%T ${candidate.title}`,
+    ...candidate.authors.map((a) => `%A ${a}`),
+    candidate.journal ? `%J ${candidate.journal}` : undefined,
+    candidate.year ? `%D ${candidate.year}` : undefined,
+    candidate.doi ? `%R ${candidate.doi}` : undefined,
+    ""
+  ].filter((l) => l !== undefined);
+
   return {
     bibtex: `@article{${citeKey(candidate)},\n  ${fields.join(",\n  ")}\n}`,
     numbered: `${authors}. ${candidate.title}.${candidate.journal ? ` ${candidate.journal}.` : ""}${candidate.year ? ` ${candidate.year}.` : ""}${candidate.doi ? ` doi:${candidate.doi}.` : ""}`.trim(),
+    enw: enwLines.join("\n"),
     cslJson: {
       type: "article-journal",
       title: candidate.title,

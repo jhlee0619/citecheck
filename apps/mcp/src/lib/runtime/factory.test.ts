@@ -1,8 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildRuntimeFromConfig, defaultRuntimeFactoryConfig } from "./factory.js";
+import { buildRuntimeFromConfig, defaultRuntimeFactoryConfig, summarizeEffectiveRuntimeConfig } from "./factory.js";
 import { SourceReplayRegistry } from "./fixture-registry.js";
 
 describe("runtime factory", () => {
+  it("exposes conservative live HTTP defaults for reruns", () => {
+    const config = defaultRuntimeFactoryConfig();
+    const summary = summarizeEffectiveRuntimeConfig(config);
+
+    expect(config.batchConcurrency).toBe(2);
+    expect(config.httpMaxRetries).toBe(2);
+    expect(config.sourceHttpPolicies.crossref?.minIntervalMs).toBe(1_000);
+    expect(config.sourceHttpPolicies.pubmed?.minIntervalMs).toBe(1_000);
+    expect(summary).toMatchObject({
+      batchConcurrency: 2,
+      httpMaxRetries: 2
+    });
+  });
+
   it("uses fixture-backed live connectors when configured", async () => {
     const runtime = buildRuntimeFromConfig({
       ...defaultRuntimeFactoryConfig(),

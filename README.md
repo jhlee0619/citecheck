@@ -53,20 +53,35 @@ Once the server is registered, ask the agent to use the `citecheck` MCP server f
 
 Exposed MCP tools:
 
+- `scan_workspace`
+- `analyze_references`
+- `plan_reference_rewrite`
+- `apply_reference_rewrite`
 - `repair_paper`
 - `citecheck_version`
 
 Use `citecheck_version` for a quick connectivity check.
 
-Use `repair_paper` for all reference-repair work.
+Recommended workflow:
 
-Core inputs for `repair_paper`:
+- `scan_workspace` to identify the most likely paper/reference source
+- `analyze_references` for structured review output
+- `plan_reference_rewrite` for replacement-safe previews and patch plans
+- `apply_reference_rewrite` only when explicit write-back is desired
+- `repair_paper` as a compatibility wrapper
+
+Core inputs across the workflow:
 
 - `target_path`
+- `mode`
 - `output_format`
 - `policy`
 - `fixture_mode`
 - `fixture_manifest`
+
+Write-back planning and apply tools also accept:
+
+- `write_mode`
 
 `target_path` may be either a project folder or a single file.
 
@@ -77,6 +92,11 @@ Supported file types:
 - `.md`
 - `.txt`
 - `.docx`
+
+`mode` values:
+
+- `review`: inspect, diff, and report risks without treating the output as overwrite-safe
+- `replacement`: try to build a replacement-ready bibliography, but block or partialize the result if safety checks fail
 
 ### Example Request
 
@@ -92,12 +112,25 @@ The agent should then call `repair_paper` with `target_path` set to the current 
 
 Default output is JSON. It includes:
 
+- mode
+- manifestation policy
 - selected file
 - detected format
 - references extracted
 - entry statuses
+- review status
+- replacement eligibility
+- matched work confidence
+- manifestation conflict
+- bibliography lint findings
+- curation worklist
+- key mapping
+- duplicate key detection
+- citation rewrite risk
+- verification degraded flag
 - corrected entries
 - `proposedOutput`
+- `replacementStatus`
 - policy result
 - exit code
 
@@ -120,8 +153,9 @@ Typical usage:
 
 1. Register the `citecheck` MCP server.
 2. Optionally call `citecheck_version`.
-3. Call `repair_paper` with the current project path.
-4. Return the selected file, extraction summary, problematic entries, and corrected bibliography.
+3. Call `scan_workspace` or `analyze_references` with the current project path.
+4. Call `plan_reference_rewrite` for patch previews when needed.
+5. Call `apply_reference_rewrite` only for explicit sidecar or in-place writes.
 
 Repository-local guidance for agents also lives in [AGENTS.md](/data/jhleeEND/software/citecheck/AGENTS.md).
 

@@ -26,6 +26,7 @@ import { toConnectorError, type ReferenceConnector } from "../connectors/index.j
 
 export interface RuntimeOptions {
   connectors: ReferenceConnector[];
+  batchConcurrency?: number;
 }
 
 export interface VerifyReferenceListOptions {
@@ -40,9 +41,11 @@ const PASS_PLANS: Array<{ sources: SourceName[]; reformulationReason?: string }>
 
 export class CitecheckRuntime {
   private readonly connectors: Map<SourceName, ReferenceConnector>;
+  private readonly batchConcurrency: number;
 
   public constructor(options: RuntimeOptions) {
     this.connectors = new Map(options.connectors.map((connector) => [connector.source, connector]));
+    this.batchConcurrency = Math.max(1, options.batchConcurrency ?? 2);
   }
 
   public async verifyReference(input: ReferenceInput): Promise<ValidationResult> {
@@ -121,7 +124,7 @@ export class CitecheckRuntime {
     inputs: ReferenceInput[],
     options: VerifyReferenceListOptions = {}
   ): Promise<BatchResult> {
-    const results = await Promise.all(inputs.map((input) => this.verifyReference(input)));
+    const results = await mapWithConcurrency(inputs, this.batchConcurrency, (input) => this.verifyReference(input));
     const summary = results.reduce<BatchResult["summary"]>(
       (accumulator, result) => {
         accumulator.total += 1;
@@ -149,6 +152,27 @@ export class CitecheckRuntime {
       summary
     };
   }
+}
+
+async function mapWithConcurrency<TInput, TOutput>(
+  inputs: TInput[],
+  concurrency: number,
+  mapper: (input: TInput, index: number) => Promise<TOutput>
+): Promise<TOutput[]> {
+  const results = new Array<TOutput>(inputs.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < inputs.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(inputs[currentIndex] as TInput, currentIndex);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(inputs.length, 1)) }, () => worker());
+  await Promise.all(workers);
+  return results;
 }
 
 function countDuplicateResults(results: ValidationResult[]): number {
@@ -196,12 +220,8 @@ function buildTraceQuery(query: ReturnType<typeof normalizeReferenceInput>): str
   return query.doi ?? query.pmid ?? query.pmcid ?? query.arxivId ?? query.title ?? query.raw;
 }
 
-function isPromotableCandidate(candidate: CandidateRecord, connectors: Map<SourceName, ReferenceConnector>): boolean {
-  const role = connectors.get(candidate.source)?.role;
-  if (role !== "enrichment") {
-    return true;
-  }
-  return Boolean(candidate.doi || candidate.pmid || candidate.pmcid || candidate.arxivId);
+function isPromotableCandidate(candidate: CandidateRecord, _connectors: Map<SourceName, ReferenceConnector>): boolean {
+  return Boolean(candidate.title);
 }
 
 function finalizeResult(

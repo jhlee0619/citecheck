@@ -16,5 +16,13 @@ npx tsx src/mcp.ts
 
 Exposed tools:
 
+- `scan_workspace`
+- `analyze_references`
+- `plan_reference_rewrite`
+- `apply_reference_rewrite`
 - `repair_paper`
 - `citecheck_version`
+
+Recommended default:
+
+- `mode: "review"`

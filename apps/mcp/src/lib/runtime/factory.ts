@@ -22,6 +22,7 @@ export interface RuntimeFactoryConfig {
   enableCrossref: boolean;
   enableArxiv: boolean;
   enableSemanticScholar: boolean;
+  batchConcurrency: number;
   httpTimeoutMs: number;
   httpMaxRetries: number;
   userAgent: string;
@@ -38,11 +39,33 @@ export function defaultRuntimeFactoryConfig(): RuntimeFactoryConfig {
     enableCrossref: true,
     enableArxiv: true,
     enableSemanticScholar: false,
+    batchConcurrency: 2,
     httpTimeoutMs: 10_000,
-    httpMaxRetries: 1,
+    httpMaxRetries: 2,
     userAgent: "citecheck/0.1.0",
     contactEmail: undefined,
-    sourceHttpPolicies: {},
+    sourceHttpPolicies: {
+      pubmed: {
+        retries: 2,
+        backoffMs: 2_000,
+        minIntervalMs: 1_000
+      },
+      crossref: {
+        retries: 2,
+        backoffMs: 2_000,
+        minIntervalMs: 1_000
+      },
+      arxiv: {
+        retries: 1,
+        backoffMs: 1_000,
+        minIntervalMs: 500
+      },
+      semantic_scholar: {
+        retries: 2,
+        backoffMs: 2_000,
+        minIntervalMs: 1_000
+      }
+    },
     fixtureMode: "off",
     fixtureRegistry: undefined
   };
@@ -84,7 +107,7 @@ export function buildRuntimeFromConfig(config: RuntimeFactoryConfig): CitecheckR
         })
       );
     }
-    return new CitecheckRuntime({ connectors });
+    return new CitecheckRuntime({ connectors, batchConcurrency: config.batchConcurrency });
   }
 
   if (config.enablePubmed) {
@@ -99,7 +122,7 @@ export function buildRuntimeFromConfig(config: RuntimeFactoryConfig): CitecheckR
   if (config.enableSemanticScholar) {
       connectors.push(createDemoSemanticScholarConnector());
   }
-  return new CitecheckRuntime({ connectors });
+  return new CitecheckRuntime({ connectors, batchConcurrency: config.batchConcurrency });
 }
 
 function createHttpClient(config: RuntimeFactoryConfig): HttpClient {
@@ -111,6 +134,7 @@ function createHttpClient(config: RuntimeFactoryConfig): HttpClient {
     }),
     {
       retries: config.httpMaxRetries,
+      backoffMs: 500,
       sourcePolicies: config.sourceHttpPolicies
     }
   );
@@ -154,6 +178,7 @@ export function summarizeEffectiveRuntimeConfig(config: RuntimeFactoryConfig): R
     enableCrossref: config.enableCrossref,
     enableArxiv: config.enableArxiv,
     enableSemanticScholar: config.enableSemanticScholar,
+    batchConcurrency: config.batchConcurrency,
     httpTimeoutMs: config.httpTimeoutMs,
     httpMaxRetries: config.httpMaxRetries,
     fixtureMode: config.fixtureMode,

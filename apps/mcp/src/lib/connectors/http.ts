@@ -18,6 +18,7 @@ export interface SourceHttpPolicy {
   timeoutMs?: number;
   retries?: number;
   backoffMs?: number;
+  minIntervalMs?: number;
 }
 
 export interface FetchHttpClientOptions {
@@ -30,6 +31,8 @@ export class FetchHttpClient implements HttpClient {
   private readonly userAgent: string;
   private readonly defaultTimeoutMs: number;
   private readonly sourcePolicies: Partial<Record<SourceName, SourceHttpPolicy>>;
+  private readonly sourceNextRequestAt = new Map<SourceName, number>();
+  private readonly sourceQueues = new Map<SourceName, Promise<void>>();
 
   public constructor(options: FetchHttpClientOptions = {}) {
     this.userAgent = options.userAgent ?? "citecheck/0.1.0";
@@ -39,20 +42,56 @@ export class FetchHttpClient implements HttpClient {
 
   public async get(request: HttpRequest): Promise<string> {
     const policy = this.sourcePolicies[request.source];
-    const controller = new AbortController();
-    const timeoutMs = policy?.timeoutMs ?? this.defaultTimeoutMs;
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetch(request.url, {
-        headers: buildHeaders(this.userAgent, request.headers, policy),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        throw new HttpError(request.source, response.status, response.statusText);
+    return this.withSourceThrottle(request.source, policy?.minIntervalMs ?? 0, async () => {
+      const controller = new AbortController();
+      const timeoutMs = policy?.timeoutMs ?? this.defaultTimeoutMs;
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(request.url, {
+          headers: buildHeaders(this.userAgent, request.headers, policy),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new HttpError(
+            request.source,
+            response.status,
+            response.statusText,
+            parseRetryAfterHeader(response.headers.get("retry-after"))
+          );
+        }
+        return await response.text();
+      } finally {
+        clearTimeout(timer);
       }
-      return await response.text();
+    });
+  }
+
+  private async withSourceThrottle<T>(source: SourceName, minIntervalMs: number, action: () => Promise<T>): Promise<T> {
+    const prior = this.sourceQueues.get(source) ?? Promise.resolve();
+    let release: (() => void) | undefined;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gate = prior.finally(() => current);
+    this.sourceQueues.set(source, gate);
+    await prior;
+
+    try {
+      if (minIntervalMs > 0) {
+        const waitMs = (this.sourceNextRequestAt.get(source) ?? 0) - Date.now();
+        if (waitMs > 0) {
+          await delay(waitMs);
+        }
+      }
+      return await action();
     } finally {
-      clearTimeout(timer);
+      if (minIntervalMs > 0) {
+        this.sourceNextRequestAt.set(source, Date.now() + minIntervalMs);
+      }
+      release?.();
+      if (this.sourceQueues.get(source) === gate) {
+        this.sourceQueues.delete(source);
+      }
     }
   }
 }
@@ -89,7 +128,10 @@ export class RetryingHttpClient implements HttpClient {
         if (!shouldRetry(error) || attempt === retries) {
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, backoffMs * (attempt + 1)));
+        const retryDelayMs = error instanceof HttpError && error.retryAfterMs !== undefined
+          ? error.retryAfterMs
+          : backoffMs * (attempt + 1);
+        await delay(retryDelayMs);
       }
     }
     throw lastError instanceof Error ? lastError : new Error("request failed");
@@ -102,8 +144,9 @@ export class HttpError extends Error {
   public readonly failureClass: SourceFailureClass;
   public readonly failureReason: SourceFailureReason;
   public readonly retryable: boolean;
+  public readonly retryAfterMs?: number;
 
-  public constructor(source: SourceName, status: number, statusText: string) {
+  public constructor(source: SourceName, status: number, statusText: string, retryAfterMs?: number) {
     super(`request failed for ${source}: ${status} ${statusText}`);
     this.name = "HttpError";
     this.source = source;
@@ -111,6 +154,7 @@ export class HttpError extends Error {
     this.failureClass = classifyHttpFailureClass(status);
     this.failureReason = "http_error";
     this.retryable = this.failureClass === "rate_limit_failure" || this.failureClass === "transport_failure";
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -136,6 +180,25 @@ function shouldRetry(error: unknown): boolean {
     return true;
   }
   return error.retryable;
+}
+
+function parseRetryAfterHeader(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number.parseFloat(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+  const dateMs = Date.parse(value);
+  if (!Number.isNaN(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+  return undefined;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function toConnectorError(error: unknown, source: SourceName): ConnectorError {

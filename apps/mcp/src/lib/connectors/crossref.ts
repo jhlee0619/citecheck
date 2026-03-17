@@ -9,10 +9,14 @@ interface CrossrefConnectorOptions {
   rows?: number;
 }
 
-interface CrossrefApiResponse {
+interface CrossrefListResponse {
   message?: {
     items?: CrossrefWork[];
   };
+}
+
+interface CrossrefSingleResponse {
+  message?: CrossrefWork;
 }
 
 interface CrossrefWork {
@@ -42,12 +46,25 @@ export class CrossrefConnector implements ReferenceConnector {
 
   public async search(query: NormalizedQuery): Promise<ConnectorSearchResult> {
     const url = this.buildUrl(query);
+    const isDOILookup = Boolean(query.doi);
     const body = await this.httpClient.get({ source: this.source, url });
-    const payload = this.parseJson<CrossrefApiResponse>(body, "json_parse_failure", "invalid Crossref JSON");
-    if (!payload.message || typeof payload.message !== "object") {
-      throw new ConnectorPayloadError(this.source, "missing_required_top_level", "missing message object");
+
+    let works: CrossrefWork[];
+    if (isDOILookup) {
+      const payload = this.parseJson<CrossrefSingleResponse>(body, "json_parse_failure", "invalid Crossref JSON");
+      if (!payload.message || typeof payload.message !== "object") {
+        throw new ConnectorPayloadError(this.source, "missing_required_top_level", "missing message object");
+      }
+      works = [payload.message];
+    } else {
+      const payload = this.parseJson<CrossrefListResponse>(body, "json_parse_failure", "invalid Crossref JSON");
+      if (!payload.message || typeof payload.message !== "object") {
+        throw new ConnectorPayloadError(this.source, "missing_required_top_level", "missing message object");
+      }
+      works = payload.message?.items ?? [];
     }
-    const candidates = (payload.message?.items ?? []).map((work, index) => normalizeCandidate(this.toCandidate(work, index)));
+
+    const candidates = works.map((work, index) => normalizeCandidate(this.toCandidate(work, index)));
 
     return {
       source: this.source,
@@ -74,7 +91,7 @@ export class CrossrefConnector implements ReferenceConnector {
       url.searchParams.set("query.bibliographic", query.raw);
     }
     if (query.year) {
-      url.searchParams.set("filter", `from-pub-date:${query.year},until-pub-date:${query.year}`);
+      url.searchParams.set("filter", `from-pub-date:${query.year - 1},until-pub-date:${query.year + 1}`);
     }
     url.searchParams.set("rows", String(this.rows));
     if (this.mailto) {
