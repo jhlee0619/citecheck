@@ -28,7 +28,7 @@ At a high level, `citecheck`:
 
 ## Install
 
-After publishing, the intended setup is:
+Install as an MCP server:
 
 ```bash
 claude mcp add citecheck -- npx -y @citecheck/mcp

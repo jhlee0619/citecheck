@@ -21,65 +21,47 @@ bibliography: paper.bib
 
 # Summary
 
-Bibliographic errors in scholarly manuscripts---incorrect DOIs, misattributed authors, wrong publication years, and missing identifiers---are pervasive and consequential. Manual verification of reference lists against authoritative databases is tedious and error-prone, particularly for manuscripts containing dozens of entries across biomedical, computational, and interdisciplinary literatures. `citecheck` is a Model Context Protocol (MCP) server, written in TypeScript, that automates the verification and repair of reference lists in academic papers. Given a manuscript file (`.bib`, `.tex`, `.md`, `.txt`, or `.docx`), `citecheck` extracts the references section, validates each entry against PubMed, Crossref, arXiv, and Semantic Scholar through a multi-pass retrieval strategy, and returns structured correction proposals with per-entry confidence scores, evidence traces, and actionable curation worklists. The tool is designed for integration with MCP-capable AI agents such as Claude Code and Codex, enabling fully autonomous bibliography repair within agent-driven research workflows.
+Reference lists in scholarly manuscripts frequently contain errors---incorrect DOIs, misattributed authors, wrong publication years, and missing identifiers---that impede reproducibility and distort the citation record. Verifying each entry against authoritative databases is tedious when done manually, especially for manuscripts spanning biomedical, computational, and interdisciplinary literatures. `citecheck` is a TypeScript tool that automates this verification. Given a manuscript file (`.bib`, `.tex`, `.md`, `.txt`, or `.docx`), it extracts the references section, validates each entry against PubMed, Crossref, arXiv, and Semantic Scholar through a multi-pass retrieval strategy, and returns structured correction proposals with per-entry confidence scores and evidence traces. `citecheck` is distributed as a Model Context Protocol (MCP) server, allowing AI coding agents---such as Claude Code and Codex---to invoke it directly and repair bibliographies without manual intervention. Researchers who do not use AI agents can also call the repair API programmatically or inspect the structured JSON output.
 
 # Statement of Need
 
+`citecheck` targets two audiences: (1) researchers preparing manuscripts who need to verify that their reference lists are accurate before submission, and (2) developers building AI-assisted writing tools who need a programmatic bibliographic verification backend.
+
 Reference list errors are among the most common defects in published scientific literature. Studies have reported bibliographic inaccuracy rates of 25--54% across disciplines [@sievert1992; @booth2004], with DOI errors alone affecting up to 10% of entries in sampled corpora [@teixeira2013]. These errors impede reproducibility, distort citation metrics, and undermine the scholarly record.
 
-The rise of large language models (LLMs) in research workflows has introduced a new category of bibliographic error: citation hallucination. LLMs routinely fabricate references that appear plausible but do not correspond to real publications, blending author names from one paper with titles from another and generating fictitious DOIs [@walters2023]. A systematic evaluation found that 19.9% of citations produced by GPT-4o were entirely fabricated, with over half of non-fabricated citations still containing bibliographic errors [@linardon2025]. At scale, the problem is already contaminating the scholarly record: an analysis of 2.2 million citations in 56,381 papers published at top-tier AI/ML venues (2020--2025) identified 604 papers containing invalid or fabricated citations, with an 80.9% year-over-year increase in 2025 [@xu2026]. A targeted audit of NeurIPS 2025 accepted papers found over 100 hallucinated citations across 51 published papers, demonstrating that even elite peer review fails to catch LLM-generated bibliographic fabrications [@ansari2026].
+The rise of large language models (LLMs) in research workflows has introduced a new category of bibliographic error: citation hallucination. LLMs routinely fabricate references that appear plausible but do not correspond to real publications, blending author names from one paper with titles from another and generating fictitious DOIs [@walters2023]. A systematic evaluation found that 19.9% of citations produced by GPT-4o were entirely fabricated, with over half of non-fabricated citations still containing bibliographic errors [@linardon2025]. At scale, the problem is already contaminating the scholarly record: an analysis of 2.2 million citations from papers published at top-tier AI/ML venues (2020--2025) identified over 600 papers containing invalid or fabricated citations, with a year-over-year increase in 2025 [@xu2026]. Notably, these findings rely on recent preprints and should be interpreted with the caveat that the reported rates may be refined as the studies undergo peer review. Nevertheless, a targeted audit of NeurIPS 2025 accepted papers corroborates the trend, finding over 100 hallucinated citations across 51 published papers [@ansari2026].
 
-Existing tools for reference management---Zotero [@zotero], Mendeley, and EndNote---focus on organizing and formatting citations from curated personal libraries, but do not independently verify that a reference list in a manuscript accurately reflects the metadata held by authoritative registries. Citation-checking utilities such as `anystyle` [@anystyle] parse unstructured reference strings, while Crossref's metadata API [@crossref_api] enables individual DOI resolution, but no integrated tool combines multi-source validation, error classification, and structured repair output in a format suitable for programmatic consumption by AI agents.
+Existing tools for reference management---Zotero [@zotero], Mendeley [@mendeley], and EndNote [@endnote]---focus on organizing and formatting citations from curated personal libraries, but do not independently verify that a reference list in a manuscript accurately reflects the metadata held by authoritative registries. Citation-checking utilities such as `anystyle` [@anystyle] parse unstructured reference strings, and single-purpose converters such as `doi2bib` [@doi2bib] resolve individual DOIs to BibTeX, but neither performs bulk cross-source validation or produces structured error classifications. Crossref's metadata API [@crossref_api] enables programmatic DOI resolution, yet using it for end-to-end bibliography repair requires substantial glue code to handle query formulation, multi-source triangulation, and safe output generation.
 
-The emergence of the Model Context Protocol (MCP) [@mcp2024] as a standard interface between large language models and external tools creates a new opportunity: an MCP server that AI coding agents can invoke directly to inspect, validate, and repair bibliographies without human intervention. By providing ground-truth verification against authoritative registries, `citecheck` serves as a guardrail against both traditional bibliographic errors and LLM-induced citation hallucinations. It fills this gap by providing a purpose-built MCP server that exposes a structured, multi-tool workflow for bibliographic quality assurance.
+The emergence of the Model Context Protocol (MCP) [@mcp2024] as a standard interface between large language models and external tools creates a new opportunity: a verification server that AI agents can invoke directly to inspect, validate, and repair bibliographies. By cross-referencing each entry against authoritative registries, `citecheck` serves as a guardrail against both traditional bibliographic errors and LLM-induced citation hallucinations.
 
 # State of the Field
 
-Reference management tools broadly fall into three categories: (1) personal library managers (Zotero, Mendeley, EndNote) that organize user-curated records; (2) parsing libraries (`anystyle`, `GROBID` [@grobid]) that extract structured fields from unstructured citation strings; and (3) metadata resolution APIs (Crossref REST API, PubMed E-utilities [@pubmed_eutils], Semantic Scholar API [@semantic_scholar_api]) that look up individual records. None of these categories alone addresses the end-to-end problem of validating an existing reference list against multiple authoritative sources, classifying discrepancies, and producing replacement-safe output.
+Reference management tools broadly fall into three categories: (1) personal library managers such as Zotero [@zotero], Mendeley [@mendeley], and EndNote [@endnote] that organize user-curated records; (2) parsing libraries such as `anystyle` [@anystyle] and `GROBID` [@grobid] that extract structured fields from unstructured citation strings; and (3) metadata resolution APIs such as the Crossref REST API [@crossref_api], PubMed E-utilities [@pubmed_eutils], and Semantic Scholar API [@semantic_scholar_api] that look up individual records. None of these categories alone addresses the end-to-end problem of validating an existing reference list against multiple authoritative sources, classifying discrepancies, and producing replacement-safe output.
 
-Tools like `doi2bib` convert a single DOI to BibTeX but cannot handle bulk verification or detect inconsistencies between a manuscript's stated metadata and registry records. `GROBID` excels at PDF-to-structured-data extraction but does not perform cross-source validation or produce repair proposals. The Crossref "polite pool" API and PubMed E-utilities each cover subsets of the scholarly literature; biomedical manuscripts typically require querying both, plus arXiv for preprints. No existing tool orchestrates these sources with progressive query reformulation, candidate clustering, manifestation-aware deduplication, and policy-gated batch-level quality assessment.
+Single-purpose converters such as `doi2bib` [@doi2bib] resolve a DOI to BibTeX but cannot detect inconsistencies between a manuscript's stated metadata and registry records. `GROBID` excels at PDF-to-structured-data extraction but does not perform cross-source validation or produce repair proposals. Each API covers a subset of the scholarly literature; biomedical manuscripts typically require querying PubMed and Crossref together, plus arXiv for preprints, and no existing tool orchestrates these sources with progressive query reformulation, candidate clustering, and batch-level quality assessment.
 
-`citecheck` addresses this gap by integrating four external data sources behind a unified verification runtime, with a multi-pass search strategy that automatically reformulates queries when initial retrieval yields insufficient evidence.
+A new tool was needed rather than an extension to existing managers because the core problem is verification against external ground truth, not organization of a personal library. Building on MCP rather than a plugin API for a specific reference manager ensures that any MCP-capable agent---regardless of vendor---can invoke `citecheck` without additional integration work. `citecheck` addresses this gap by integrating four data sources behind a unified verification runtime with a multi-pass search strategy.
 
 # Software Design
 
+## Why Multi-Source Verification
+
+No single bibliographic database covers all of scholarly publishing. PubMed is authoritative for biomedical literature but lacks coverage of computer science and preprints; Crossref has broad DOI coverage but limited metadata depth; arXiv provides preprint identifiers that are absent from other sources; Semantic Scholar adds citation counts useful for enrichment. `citecheck` queries all four in parallel so that a single missing source does not cause a false negative. This design trades higher network cost for recall: connector calls execute concurrently via `Promise.allSettled()`, so latency is bounded by the slowest source rather than the sum.
+
+## Why Multi-Pass Retrieval
+
+A single query formulation often fails when the manuscript's reference text is incomplete or unconventional. Rather than returning "unresolved" immediately, the runtime reformulates the query up to two additional times---first normalizing the title with author/year anchors, then broadening to alternative source combinations. This progressive strategy accepts additional API calls in exchange for substantially higher retrieval rates on real-world manuscripts where references lack strong identifiers.
+
+## Why Policy-Gated Output
+
+Automated bibliography replacement is risky: a misidentified candidate can silently corrupt a reference list. `citecheck` separates analysis from modification through a two-mode design (`review` vs. `replacement`) and a batch-level policy engine. The policy engine evaluates aggregate verification outcomes---failure rates, source health, confidence distributions---against configurable thresholds (default, strict, lenient). Replacement output is blocked unless safety checks pass for every entry. This conservative default reflects the principle that a false correction is worse than no correction.
+
 ## Architecture
 
-`citecheck` is organized as a monorepo with the MCP server published as `@citecheck/mcp` on npm. The codebase comprises approximately 6,770 lines of TypeScript across four modules (\autoref{fig:architecture}):
+The codebase (\autoref{fig:architecture}) is organized into four modules: **Connectors** (HTTP clients implementing a shared `ReferenceConnector` interface with per-source rate limiting), **Core** (normalization, Jaccard-based similarity scoring, candidate clustering, and evidence building), **Runtime** (multi-pass orchestration with configurable batch concurrency), and **Policy** (batch-level quality gates). The MCP server exposes six tools following a progressive-disclosure workflow, documented in the project README. Output is available in JSON, BibTeX, numbered text, Markdown, or EndNote format.
 
-- **Connectors**: HTTP clients for PubMed, Crossref, arXiv, and Semantic Scholar, each implementing a common `ReferenceConnector` interface. Per-source rate limiting and retry policies are configured at the HTTP client level.
-- **Core**: Normalization, candidate comparison, Jaccard-based similarity scoring, cluster construction, evidence building, and issue derivation logic.
-- **Runtime**: Multi-pass verification orchestration. Each reference is queried against available connectors in parallel; if no promotable candidate emerges, the runtime reformulates the query and re-queries a subset of sources. Up to three passes are attempted before marking a reference as unresolved.
-- **Policy**: Batch-level quality gates that evaluate aggregate verification outcomes against configurable thresholds (default, strict, lenient presets), producing an exit decision that signals whether the batch is safe for downstream use.
-
-![Simplified architecture of citecheck. The MCP server exposes tools that delegate to the repair API. The runtime orchestrates multi-pass verification across four external connectors, with results evaluated by the policy engine.\label{fig:architecture}](architecture.png){ width=80% }
-
-## Multi-Pass Verification
-
-For each reference, the runtime executes up to three retrieval passes with progressively relaxed query formulations:
-
-1. **Pass 1** queries all enabled connectors (PubMed, Crossref, arXiv, Semantic Scholar) with the original query.
-2. **Pass 2** uses a normalized title with author/year anchors.
-3. **Pass 3** broadens the search to alternative source combinations.
-
-Within each pass, connector calls execute concurrently via `Promise.allSettled()`, and multiple references are processed in parallel (configurable batch concurrency, default 5). Candidates returned from different sources are clustered by shared identifiers (DOI, PMID) or high title similarity ($\geq 0.8$ Jaccard coefficient), then scored on retrieval confidence and metadata consistency.
-
-## Candidate Evaluation
-
-Each candidate cluster is compared against the original reference entry across normalized title, author lists, year, journal, and identifiers. A confidence score pair (retrieval, metadata consistency) determines the validation status: `verified`, `verified_with_warnings`, `needs_review`, or `unresolved`. The system detects 14 issue types including identifier mismatches, title discrepancies, missing fields, retraction flags, and manifestation conflicts (e.g., a journal article cited as a preprint).
-
-## MCP Tool Interface
-
-`citecheck` exposes six MCP tools following a progressive-disclosure workflow:
-
-- `scan_workspace`: identifies paper-like files in a directory.
-- `analyze_references`: extracts, lints, and validates references (read-only).
-- `plan_reference_rewrite`: previews correction patches with safety assessment.
-- `apply_reference_rewrite`: writes corrected output as a sidecar file or in-place replacement.
-- `repair_paper`: unified single-call entry point.
-- `citecheck_version`: server health check.
-
-Output is available in JSON, BibTeX, numbered text, Markdown, or EndNote format. The structured JSON output includes per-entry evidence traces, field-level diffs, replacement eligibility flags, and a curation worklist that agents can use to prioritize human review.
+![Simplified architecture of citecheck. The MCP server delegates to the repair API. The runtime orchestrates multi-pass verification across four external connectors, with results evaluated by the policy engine.\label{fig:architecture}](architecture.png){ width=80% }
 
 # Research Impact Statement
 
